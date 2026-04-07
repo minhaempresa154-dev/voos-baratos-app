@@ -8,7 +8,19 @@ services:
     envVars:
       - key: PORT
         value: 8787
+      - key: FLIGHTS_PROVIDER
+        value: duffel
       - key: DUFFEL_MODE
         value: test
       - key: DUFFEL_ACCESS_TOKEN
         sync: false
+      - key: SKYSCANNER_API_KEY
+        sync: false
+      - key: SKYSCANNER_AFFILIATE_ID
+        sync: false
+      - key: SKYSCANNER_MARKET
+        value: BR
+      - key: SKYSCANNER_LOCALE
+        value: pt-BR
+      - key: SKYSCANNER_CURRENCY
+        value: BRL

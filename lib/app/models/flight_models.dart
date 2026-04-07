@@ -160,6 +160,7 @@ class FlightOffer {
     required this.id,
     required this.airline,
     required this.validatingAirlineCodes,
+    required this.flightNumber,
     required this.originCode,
     required this.destinationCode,
     required this.departureAt,
@@ -173,11 +174,13 @@ class FlightOffer {
     required this.baggageIncluded,
     required this.cabin,
     required this.segments,
+    this.buyUrl,
   });
 
   final String id;
   final String airline;
   final List<String> validatingAirlineCodes;
+  final String flightNumber;
   final String originCode;
   final String destinationCode;
   final DateTime departureAt;
@@ -191,6 +194,7 @@ class FlightOffer {
   final bool baggageIncluded;
   final String cabin;
   final List<FlightSegment> segments;
+  final String? buyUrl;
 
   factory FlightOffer.fromJson(Map<String, dynamic> json) {
     return FlightOffer(
@@ -200,6 +204,7 @@ class FlightOffer {
           (json['validatingAirlineCodes'] as List<dynamic>? ?? const [])
               .map((item) => '$item')
               .toList(),
+      flightNumber: '${json['flightNumber'] ?? ''}',
       originCode: '${json['originCode'] ?? ''}',
       destinationCode: '${json['destinationCode'] ?? ''}',
       departureAt: DateTime.parse('${json['departureAt']}'),
@@ -216,6 +221,7 @@ class FlightOffer {
       segments: (json['segments'] as List<dynamic>? ?? const [])
           .map((item) => FlightSegment.fromJson(item as Map<String, dynamic>))
           .toList(),
+      buyUrl: json['buyUrl'] as String?,
     );
   }
 
@@ -224,6 +230,7 @@ class FlightOffer {
       'id': id,
       'airline': airline,
       'validatingAirlineCodes': validatingAirlineCodes,
+      'flightNumber': flightNumber,
       'originCode': originCode,
       'destinationCode': destinationCode,
       'departureAt': departureAt.toIso8601String(),
@@ -237,6 +244,7 @@ class FlightOffer {
       'baggageIncluded': baggageIncluded,
       'cabin': cabin,
       'segments': segments.map((item) => item.toJson()).toList(),
+      'buyUrl': buyUrl,
     };
   }
 }
@@ -248,9 +256,12 @@ class SavedTrip {
     required this.airline,
     required this.originCode,
     required this.destinationCode,
+    required this.flightNumber,
     required this.departureAt,
     required this.arrivalAt,
     required this.bookingCode,
+    required this.statusLabel,
+    required this.purchaseChannel,
     required this.notes,
     required this.priceLabel,
     required this.createdAt,
@@ -261,9 +272,12 @@ class SavedTrip {
   final String airline;
   final String originCode;
   final String destinationCode;
+  final String flightNumber;
   final DateTime departureAt;
   final DateTime arrivalAt;
   final String bookingCode;
+  final String statusLabel;
+  final String purchaseChannel;
   final String notes;
   final String priceLabel;
   final DateTime createdAt;
@@ -275,9 +289,12 @@ class SavedTrip {
       airline: '${json['airline'] ?? ''}',
       originCode: '${json['originCode'] ?? ''}',
       destinationCode: '${json['destinationCode'] ?? ''}',
+      flightNumber: '${json['flightNumber'] ?? ''}',
       departureAt: DateTime.parse('${json['departureAt']}'),
       arrivalAt: DateTime.parse('${json['arrivalAt']}'),
       bookingCode: '${json['bookingCode'] ?? ''}',
+      statusLabel: '${json['statusLabel'] ?? ''}',
+      purchaseChannel: '${json['purchaseChannel'] ?? ''}',
       notes: '${json['notes'] ?? ''}',
       priceLabel: '${json['priceLabel'] ?? ''}',
       createdAt: DateTime.parse('${json['createdAt']}'),
@@ -291,9 +308,12 @@ class SavedTrip {
       'airline': airline,
       'originCode': originCode,
       'destinationCode': destinationCode,
+      'flightNumber': flightNumber,
       'departureAt': departureAt.toIso8601String(),
       'arrivalAt': arrivalAt.toIso8601String(),
       'bookingCode': bookingCode,
+      'statusLabel': statusLabel,
+      'purchaseChannel': purchaseChannel,
       'notes': notes,
       'priceLabel': priceLabel,
       'createdAt': createdAt.toIso8601String(),

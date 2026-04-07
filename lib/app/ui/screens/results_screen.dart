@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/flight_models.dart';
-import '../../repositories/saved_trips_repository.dart';
 import '../../services/flight_api_client.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
@@ -13,12 +13,10 @@ class ResultsScreen extends StatefulWidget {
     super.key,
     required this.criteria,
     required this.apiClient,
-    required this.savedTripsRepository,
   });
 
   final SearchCriteria criteria;
   final FlightApiClient apiClient;
-  final SavedTripsRepository savedTripsRepository;
 
   @override
   State<ResultsScreen> createState() => _ResultsScreenState();
@@ -85,27 +83,6 @@ class _ResultsScreenState extends State<ResultsScreen> {
       return aPrice.compareTo(bPrice);
     });
     return items;
-  }
-
-  Future<void> _saveTrip(FlightOffer offer) async {
-    final trip = SavedTrip(
-      id: 'offer-${offer.id}-${offer.departureAt.toIso8601String()}',
-      title: '${offer.originCode} -> ${offer.destinationCode}',
-      airline: offer.airline,
-      originCode: offer.originCode,
-      destinationCode: offer.destinationCode,
-      departureAt: offer.departureAt,
-      arrivalAt: offer.arrivalAt,
-      bookingCode: '',
-      notes: 'Salvo a partir de uma busca real no app.',
-      priceLabel: _priceLabel(offer),
-      createdAt: DateTime.now(),
-    );
-    await widget.savedTripsRepository.addTrip(trip);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Viagem salva em Minhas viagens.')),
-    );
   }
 
   Future<void> _showFilters() async {
@@ -244,7 +221,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 SectionTitle(
-                  title: 'Busca real de passagens',
+                  title: 'Resultados da busca',
                   subtitle:
                       '${widget.criteria.origin.name} para ${widget.criteria.destination.name}',
                 ),
@@ -273,10 +250,14 @@ class _ResultsScreenState extends State<ResultsScreen> {
                       borderRadius: BorderRadius.circular(18),
                     ),
                     child: const Text(
-                      'Real + pontos aparece como estimativa baseada na tarifa em dinheiro. Busca real de pontos depende de integracao com programas de fidelidade/companhias.',
+                      'Real + pontos aparece como estimativa. A compra real e a disponibilidade final dependem do parceiro da oferta.',
                     ),
                   ),
                 ],
+                const SizedBox(height: 14),
+                const Text(
+                  'A companhia aerea aparece destacada em cada passagem para dar mais confianca na escolha.',
+                ),
               ],
             ),
           ),
@@ -325,7 +306,6 @@ class _ResultsScreenState extends State<ResultsScreen> {
                 child: _FlightCard(
                   offer: offer,
                   fareMode: widget.criteria.fareMode,
-                  onSave: () => _saveTrip(offer),
                 ),
               ),
             ),
@@ -334,25 +314,32 @@ class _ResultsScreenState extends State<ResultsScreen> {
       ),
     );
   }
-
-  String _priceLabel(FlightOffer offer) {
-    if (widget.criteria.fareMode == FareMode.cash) {
-      return formatCurrencyBrl(offer.cashTotal);
-    }
-    return offer.cashAndPointsEstimateLabel;
-  }
 }
 
 class _FlightCard extends StatelessWidget {
   const _FlightCard({
     required this.offer,
     required this.fareMode,
-    required this.onSave,
   });
 
   final FlightOffer offer;
   final FareMode fareMode;
-  final VoidCallback onSave;
+
+  Future<void> _handleBuy(BuildContext context) async {
+    if (offer.buyUrl == null || offer.buyUrl!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Este provedor de teste nao expôs um link final de compra desta oferta. Para compra oficial por passagem selecionada, vamos precisar concluir a troca para um parceiro com deeplink de booking.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final uri = Uri.parse(offer.buyUrl!);
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -371,6 +358,16 @@ class _FlightCard extends StatelessWidget {
               if (offer.validatingAirlineCodes.isNotEmpty)
                 _InfoPill(label: offer.validatingAirlineCodes.join(', ')),
             ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            offer.flightNumber.isEmpty
+                ? 'Numero do voo indisponivel'
+                : 'Voo ${offer.flightNumber}',
+            style: const TextStyle(
+              color: Color(0xFF5D6B8A),
+              fontWeight: FontWeight.w600,
+            ),
           ),
           const SizedBox(height: 16),
           Row(
@@ -430,7 +427,9 @@ class _FlightCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      fareMode == FareMode.cash ? 'Tarifa em real' : 'Real + pontos',
+                      fareMode == FareMode.cash
+                          ? 'Tarifa em real'
+                          : 'Tarifa real + pontos',
                       style: const TextStyle(color: Color(0xFF5D6B8A)),
                     ),
                     const SizedBox(height: 4),
@@ -445,10 +444,23 @@ class _FlightCard extends StatelessWidget {
                   ],
                 ),
               ),
-              ElevatedButton.icon(
-                onPressed: onSave,
-                icon: const Icon(Icons.bookmark_add_outlined),
-                label: const Text('Salvar'),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: () => _handleBuy(context),
+                    icon: const Icon(Icons.open_in_new_rounded),
+                    label: const Text('Comprar'),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Leva o usuario para a oferta externa',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF5D6B8A),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

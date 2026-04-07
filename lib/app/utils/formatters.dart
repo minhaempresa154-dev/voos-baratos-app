@@ -40,6 +40,10 @@ String formatHourMinute(DateTime date) {
   return '$hour:$minute';
 }
 
+String formatDateTime(DateTime date) {
+  return '${formatLongDate(date)} as ${formatHourMinute(date)}';
+}
+
 String formatCurrencyBrl(double value) {
   final normalized = value.toStringAsFixed(2).replaceAll('.', ',');
   return 'R\$ $normalized';

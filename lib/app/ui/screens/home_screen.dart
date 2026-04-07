@@ -112,7 +112,6 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (_) => ResultsScreen(
           criteria: criteria,
           apiClient: widget.apiClient,
-          savedTripsRepository: widget.savedTripsRepository,
         ),
       ),
     )
@@ -121,11 +120,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _showManualTripSheet() async {
     final airlineController = TextEditingController();
+    final flightNumberController = TextEditingController();
     final originController = TextEditingController();
     final destinationController = TextEditingController();
     final bookingCodeController = TextEditingController();
+    final statusController = TextEditingController(text: 'Reserva emitida');
+    final purchaseChannelController = TextEditingController();
     final notesController = TextEditingController();
     DateTime departureDate = DateTime.now().add(const Duration(days: 15));
+    DateTime arrivalDate = DateTime.now().add(const Duration(days: 15, hours: 2));
 
     await showModalBottomSheet<void>(
       context: context,
@@ -156,6 +159,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       decoration: const InputDecoration(labelText: 'Companhia'),
                     ),
                     const SizedBox(height: 12),
+                    TextField(
+                      controller: flightNumberController,
+                      decoration: const InputDecoration(
+                        labelText: 'Numero do voo',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     Row(
                       children: [
                         Expanded(
@@ -182,6 +192,20 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 12),
                     TextField(
+                      controller: purchaseChannelController,
+                      decoration: const InputDecoration(
+                        labelText: 'Site ou app da compra',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: statusController,
+                      decoration: const InputDecoration(
+                        labelText: 'Status atual',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
                       controller: notesController,
                       maxLines: 3,
                       decoration: const InputDecoration(
@@ -202,7 +226,31 @@ class _HomeScreenState extends State<HomeScreen> {
                         }
                       },
                       icon: const Icon(Icons.calendar_today_rounded),
-                      label: Text('Data: ${formatLongDate(departureDate)}'),
+                      label: Text('Saida: ${formatDateTime(departureDate)}'),
+                    ),
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final selected = await showDatePicker(
+                          context: context,
+                          initialDate: arrivalDate,
+                          firstDate: departureDate,
+                          lastDate: DateTime.now().add(const Duration(days: 365)),
+                        );
+                        if (selected != null) {
+                          setModalState(
+                            () => arrivalDate = DateTime(
+                              selected.year,
+                              selected.month,
+                              selected.day,
+                              arrivalDate.hour,
+                              arrivalDate.minute,
+                            ),
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.schedule_rounded),
+                      label: Text('Chegada: ${formatDateTime(arrivalDate)}'),
                     ),
                     const SizedBox(height: 18),
                     SizedBox(
@@ -220,11 +268,15 @@ class _HomeScreenState extends State<HomeScreen> {
                             originCode: originController.text.trim().toUpperCase(),
                             destinationCode:
                                 destinationController.text.trim().toUpperCase(),
+                            flightNumber: flightNumberController.text.trim(),
                             departureAt: departureDate,
-                            arrivalAt: departureDate,
+                            arrivalAt: arrivalDate,
                             bookingCode: bookingCodeController.text.trim(),
+                            statusLabel: statusController.text.trim(),
+                            purchaseChannel:
+                                purchaseChannelController.text.trim(),
                             notes: notesController.text.trim(),
-                            priceLabel: 'Reserva adicionada manualmente',
+                            priceLabel: 'Viagem cadastrada manualmente',
                             createdAt: DateTime.now(),
                           );
                           await widget.savedTripsRepository.addTrip(trip);
@@ -370,7 +422,7 @@ class _SearchTab extends StatelessWidget {
         children: [
           const SizedBox(height: 12),
           Text(
-            'Pesquise passagens de verdade, com fluxo rapido e visual premium.',
+            'Pesquise passagens com visual premium e leitura clara das ofertas.',
             style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                   color: Colors.white,
                   height: 1.05,
@@ -378,7 +430,7 @@ class _SearchTab extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           const Text(
-            'Autocomplete para cidades, paises e aeroportos com 3 letras, busca real de tarifas e salvamento das viagens no app.',
+            'Autocomplete com 3 letras para cidades e aeroportos, filtros completos e companhia aerea em destaque nos resultados.',
             style: TextStyle(
               color: Color(0xDDF4F8FF),
               fontSize: 15,
@@ -449,6 +501,7 @@ class _SearchTab extends StatelessWidget {
                     Expanded(
                       child: DropdownButtonFormField<int>(
                         initialValue: adults,
+                        isExpanded: true,
                         decoration: const InputDecoration(
                           labelText: 'Adultos',
                           prefixIcon: Icon(Icons.person_rounded),
@@ -469,6 +522,7 @@ class _SearchTab extends StatelessWidget {
                     Expanded(
                       child: DropdownButtonFormField<CabinClass>(
                         initialValue: cabinClass,
+                        isExpanded: true,
                         decoration: const InputDecoration(
                           labelText: 'Cabine',
                           prefixIcon: Icon(Icons.airline_seat_recline_normal),
@@ -553,7 +607,7 @@ class _SearchTab extends StatelessWidget {
       case CabinClass.economy:
         return 'Economica';
       case CabinClass.premiumEconomy:
-        return 'Premium Economy';
+        return 'Economica premium';
       case CabinClass.business:
         return 'Executiva';
       case CabinClass.first:
@@ -584,7 +638,7 @@ class _TripsTab extends StatelessWidget {
           child: SectionTitle(
             title: 'Minhas viagens',
             subtitle:
-                'Salve voos encontrados na busca ou adicione uma viagem ja comprada manualmente.',
+                'Cadastre apenas viagens ja compradas e acompanhe companhia, horario, localizador e observacoes.',
             trailing: ElevatedButton.icon(
               onPressed: onAddTrip,
               icon: const Icon(Icons.add_rounded),
@@ -598,7 +652,7 @@ class _TripsTab extends StatelessWidget {
         else if (trips.isEmpty)
           const GlassPanel(
             child: Text(
-              'Nenhuma viagem salva ainda. Pesquise um voo e toque em salvar, ou adicione uma viagem comprada.',
+              'Nenhuma viagem cadastrada ainda. Adicione uma passagem ja comprada para acompanhar os principais dados.',
             ),
           )
         else
@@ -626,10 +680,24 @@ class _TripsTab extends StatelessWidget {
                     const SizedBox(height: 8),
                     Text('Companhia: ${trip.airline}'),
                     const SizedBox(height: 4),
-                    Text('Saida: ${formatLongDate(trip.departureAt)}'),
+                    if (trip.flightNumber.isNotEmpty)
+                      Text('Voo: ${trip.flightNumber}'),
+                    if (trip.flightNumber.isNotEmpty)
+                      const SizedBox(height: 4),
+                    Text('Saida: ${formatDateTime(trip.departureAt)}'),
+                    const SizedBox(height: 4),
+                    Text('Chegada: ${formatDateTime(trip.arrivalAt)}'),
                     if (trip.bookingCode.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text('Localizador: ${trip.bookingCode}'),
+                    ],
+                    if (trip.statusLabel.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text('Status: ${trip.statusLabel}'),
+                    ],
+                    if (trip.purchaseChannel.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text('Compra em: ${trip.purchaseChannel}'),
                     ],
                     const SizedBox(height: 4),
                     Text(trip.priceLabel),
