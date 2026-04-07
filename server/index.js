@@ -2,16 +2,10 @@ import http from "node:http";
 import { URL } from "node:url";
 
 const PORT = Number(process.env.PORT || 8787);
-const AMADEUS_ENV = process.env.AMADEUS_ENV === "production" ? "production" : "test";
-const AMADEUS_CLIENT_ID = process.env.AMADEUS_CLIENT_ID;
-const AMADEUS_CLIENT_SECRET = process.env.AMADEUS_CLIENT_SECRET;
-const AMADEUS_BASE_URL =
-  AMADEUS_ENV === "production"
-    ? "https://api.amadeus.com"
-    : "https://test.api.amadeus.com";
-
-let accessToken = null;
-let accessTokenExpiresAt = 0;
+const DUFFEL_ACCESS_TOKEN = process.env.DUFFEL_ACCESS_TOKEN;
+const DUFFEL_MODE = process.env.DUFFEL_MODE === "live" ? "live" : "test";
+const DUFFEL_BASE_URL = "https://api.duffel.com";
+const DUFFEL_VERSION = "v2";
 
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, {
@@ -36,7 +30,7 @@ function readBody(req) {
       }
       try {
         resolve(JSON.parse(raw));
-      } catch (error) {
+      } catch (_) {
         reject(new Error("JSON invalido no corpo da requisicao."));
       }
     });
@@ -45,65 +39,43 @@ function readBody(req) {
 }
 
 function ensureCredentials() {
-  if (!AMADEUS_CLIENT_ID || !AMADEUS_CLIENT_SECRET) {
+  if (!DUFFEL_ACCESS_TOKEN) {
     const error = new Error(
-      "Credenciais da Amadeus nao configuradas. Preencha AMADEUS_CLIENT_ID e AMADEUS_CLIENT_SECRET no backend."
+      "Token da Duffel nao configurado. Preencha DUFFEL_ACCESS_TOKEN no backend."
     );
     error.statusCode = 500;
     throw error;
   }
 }
 
-async function getAccessToken() {
+async function duffelRequest(path, { method = "GET", query, body } = {}) {
   ensureCredentials();
 
-  if (accessToken && Date.now() < accessTokenExpiresAt) {
-    return accessToken;
-  }
-
-  const body = new URLSearchParams({
-    grant_type: "client_credentials",
-    client_id: AMADEUS_CLIENT_ID,
-    client_secret: AMADEUS_CLIENT_SECRET,
-  });
-
-  const response = await fetch(`${AMADEUS_BASE_URL}/v1/security/oauth2/token`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body,
-  });
-
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(`Falha ao autenticar na Amadeus: ${message}`);
-  }
-
-  const payload = await response.json();
-  accessToken = payload.access_token;
-  accessTokenExpiresAt = Date.now() + Math.max((payload.expires_in - 60) * 1000, 60_000);
-  return accessToken;
-}
-
-async function amadeusGet(path, searchParams) {
-  const token = await getAccessToken();
-  const url = new URL(`${AMADEUS_BASE_URL}${path}`);
-  Object.entries(searchParams).forEach(([key, value]) => {
+  const url = new URL(`${DUFFEL_BASE_URL}${path}`);
+  Object.entries(query || {}).forEach(([key, value]) => {
     if (value !== undefined && value !== null && value !== "") {
       url.searchParams.set(key, String(value));
     }
   });
 
   const response = await fetch(url, {
+    method,
     headers: {
-      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+      Authorization: `Bearer ${DUFFEL_ACCESS_TOKEN}`,
+      "Duffel-Version": DUFFEL_VERSION,
+      ...(body ? { "Content-Type": "application/json" } : {}),
     },
+    ...(body ? { body: JSON.stringify(body) } : {}),
   });
 
   const payload = await response.json();
   if (!response.ok) {
-    const detail = payload?.errors?.[0]?.detail || payload?.errors?.[0]?.title || "Erro na API da Amadeus.";
+    const detail =
+      payload?.errors?.[0]?.message ||
+      payload?.errors?.[0]?.title ||
+      payload?.error ||
+      "Erro na API da Duffel.";
     const error = new Error(detail);
     error.statusCode = response.status;
     throw error;
@@ -113,59 +85,104 @@ async function amadeusGet(path, searchParams) {
 }
 
 function normalizeLocation(item) {
-  const address = item.address || {};
-  const name = item.name || item.detailedName || item.iataCode || "";
-  const city = address.cityName || "";
-  const country = address.countryName || "";
+  const cityName = item.city_name || item.city?.name || "";
+  const countryCode = item.iata_country_code || "";
+  const name = item.name || "";
   return {
     id: item.id,
-    iataCode: item.iataCode,
+    iataCode: item.iata_code,
     name,
-    city,
-    country,
-    subtitle: [city, country].filter(Boolean).join(", "),
-    detailedName: item.detailedName || name,
+    city: cityName,
+    country: countryCode,
+    subtitle: [cityName, countryCode].filter(Boolean).join(", "),
   };
 }
 
 function normalizeOffer(offer) {
-  const itinerary = offer.itineraries?.[0];
-  const segments = itinerary?.segments || [];
+  const slice = offer.slices?.[0];
+  const segments = slice?.segments || [];
   const firstSegment = segments[0];
   const lastSegment = segments[segments.length - 1];
-  const price = offer.price || {};
-  const travelerPricings = offer.travelerPricings || [];
-  const fareDetails = travelerPricings.flatMap((traveler) => traveler.fareDetailsBySegment || []);
-  const total = Number(price.total || 0);
-  const cashAndPointsTotal = Number((total * 0.55).toFixed(2));
-  const pointsEstimate = Math.round(total * 800);
+  const amount = Number(offer.total_amount || 0);
+  const taxAmount = Number(offer.total_tax_amount || 0);
+  const cashAndPointsAmount = Number((amount * 0.55).toFixed(2));
+  const pointsEstimate = Math.round(amount * 800);
 
   return {
     id: offer.id,
-    airline: firstSegment?.carrierCode || "Companhia",
-    validatingAirlineCodes: offer.validatingAirlineCodes || [],
-    originCode: firstSegment?.departure?.iataCode || "",
-    destinationCode: lastSegment?.arrival?.iataCode || "",
-    departureAt: firstSegment?.departure?.at,
-    arrivalAt: lastSegment?.arrival?.at,
-    duration: itinerary?.duration || "",
+    airline:
+      firstSegment?.operating_carrier?.name ||
+      firstSegment?.marketing_carrier?.name ||
+      "Companhia",
+    validatingAirlineCodes: [
+      firstSegment?.marketing_carrier?.iata_code,
+      firstSegment?.operating_carrier?.iata_code,
+    ].filter(Boolean),
+    originCode: firstSegment?.origin?.iata_code || "",
+    destinationCode: lastSegment?.destination?.iata_code || "",
+    departureAt: firstSegment?.departing_at,
+    arrivalAt: lastSegment?.arriving_at,
+    duration: slice?.duration || "",
     stops: Math.max(segments.length - 1, 0),
-    currency: price.currency || "BRL",
-    cashTotal: total,
-    cashAndPointsTotal,
-    cashAndPointsEstimateLabel: `R$ ${cashAndPointsTotal.toFixed(2).replace(".", ",")} + ${pointsEstimate} pts (estimativa)`,
+    currency: offer.total_currency || "BRL",
+    cashTotal: amount,
+    cashAndPointsTotal: cashAndPointsAmount,
+    cashAndPointsEstimateLabel: `R$ ${cashAndPointsAmount
+      .toFixed(2)
+      .replace(".", ",")} + ${pointsEstimate} pts (estimativa)`,
+    baggageIncluded: offer.conditions?.change_before_departure?.allowed ?? false,
+    cabin: segments[0]?.cabin_class || "economy",
     segments: segments.map((segment) => ({
-      carrierCode: segment.carrierCode,
-      number: segment.number,
-      originCode: segment.departure?.iataCode,
-      destinationCode: segment.arrival?.iataCode,
-      departureAt: segment.departure?.at,
-      arrivalAt: segment.arrival?.at,
-      duration: segment.duration,
+      carrierCode:
+        segment.marketing_carrier?.iata_code ||
+        segment.operating_carrier?.iata_code ||
+        "",
+      number: segment.marketing_carrier_flight_number || "",
+      originCode: segment.origin?.iata_code || "",
+      destinationCode: segment.destination?.iata_code || "",
+      departureAt: segment.departing_at,
+      arrivalAt: segment.arriving_at,
+      duration: segment.duration || "",
     })),
-    baggageIncluded: fareDetails.some((detail) => detail.includedCheckedBags?.quantity),
-    cabin: fareDetails[0]?.cabin || "ECONOMY",
+    taxAmount,
   };
+}
+
+function buildPassengers(adults) {
+  return Array.from({ length: adults }, () => ({ type: "adult" }));
+}
+
+function buildSlices(body) {
+  const slices = [
+    {
+      origin: body.originCode,
+      destination: body.destinationCode,
+      departure_date: body.departureDate,
+    },
+  ];
+
+  if (body.returnDate) {
+    slices.push({
+      origin: body.destinationCode,
+      destination: body.originCode,
+      departure_date: body.returnDate,
+    });
+  }
+
+  return slices;
+}
+
+function mapCabinClass(value) {
+  switch (value) {
+    case "PREMIUM_ECONOMY":
+      return "premium_economy";
+    case "BUSINESS":
+      return "business";
+    case "FIRST":
+      return "first";
+    default:
+      return "economy";
+  }
 }
 
 async function handleLocations(reqUrl, res) {
@@ -175,12 +192,11 @@ async function handleLocations(reqUrl, res) {
     return;
   }
 
-  const payload = await amadeusGet("/v1/reference-data/locations", {
-    keyword,
-    subType: "CITY,AIRPORT",
-    "page[limit]": 8,
-    sort: "analytics.travelers.score",
-    "view": "FULL",
+  const payload = await duffelRequest("/places/suggestions", {
+    query: {
+      query: keyword,
+      limit: 8,
+    },
   });
 
   sendJson(res, 200, {
@@ -189,21 +205,21 @@ async function handleLocations(reqUrl, res) {
 }
 
 async function handleFlights(body, res) {
-  const payload = await amadeusGet("/v2/shopping/flight-offers", {
-    originLocationCode: body.originCode,
-    destinationLocationCode: body.destinationCode,
-    departureDate: body.departureDate,
-    returnDate: body.returnDate,
-    adults: body.adults || 1,
-    travelClass: body.cabinClass || "ECONOMY",
-    currencyCode: body.currency || "BRL",
-    max: body.max || 20,
-    nonStop: body.nonStop ?? false,
+  const payload = await duffelRequest("/air/offer_requests", {
+    method: "POST",
+    query: { return_offers: true },
+    body: {
+      data: {
+        cabin_class: mapCabinClass(body.cabinClass),
+        max_connections: body.nonStop ? 0 : 2,
+        passengers: buildPassengers(Number(body.adults || 1)),
+        slices: buildSlices(body),
+      },
+    },
   });
 
   sendJson(res, 200, {
-    data: (payload.data || []).map(normalizeOffer),
-    dictionaries: payload.dictionaries || {},
+    data: (payload.data?.offers || []).map(normalizeOffer),
   });
 }
 
@@ -224,9 +240,9 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "GET" && reqUrl.pathname === "/health") {
       sendJson(res, 200, {
         ok: true,
-        provider: "amadeus",
-        environment: AMADEUS_ENV,
-        credentialsConfigured: Boolean(AMADEUS_CLIENT_ID && AMADEUS_CLIENT_SECRET),
+        provider: "duffel",
+        environment: DUFFEL_MODE,
+        credentialsConfigured: Boolean(DUFFEL_ACCESS_TOKEN),
       });
       return;
     }

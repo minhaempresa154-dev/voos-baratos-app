@@ -1,58 +1,43 @@
-# Backend em producao
+# Backend em producao com Duffel
 
-## 1. Criar credenciais
+## 1. Criar token
 
-1. Crie sua conta em https://developers.amadeus.com/
-2. Crie um app no painel.
-3. Copie:
-   - `AMADEUS_CLIENT_ID`
-   - `AMADEUS_CLIENT_SECRET`
+1. Entre em https://duffel.com/
+2. Acesse sua equipe
+3. Entre em `Desenvolvedores`
+4. Copie o token de teste que comeca com `duffel_test_`
 
-## 2. Publicar o backend
+## 2. Variaveis na Render
 
-Arquivos do backend:
+Use estas variaveis:
 
-- `server/index.js`
-- `server/Dockerfile`
-- `server/render.yaml`
+- `DUFFEL_ACCESS_TOKEN`
+- `DUFFEL_MODE=test`
 
-Opcao pratica com Render:
+## 3. URL do backend
 
-1. Crie uma conta em https://render.com/
-2. Crie um novo Web Service a partir desta pasta `server`.
-3. Configure as variaveis:
-   - `AMADEUS_CLIENT_ID`
-   - `AMADEUS_CLIENT_SECRET`
-   - `AMADEUS_ENV=test`
-4. Depois do deploy, teste:
+URL atual publicada:
 
 ```text
-https://SUA-URL.onrender.com/health
+https://voos-baratos-backend.onrender.com
 ```
 
-## 3. Gerar o APK apontando para o backend
+Teste de saude:
 
-Substitua a URL abaixo pela sua:
+```text
+https://voos-baratos-backend.onrender.com/health
+```
+
+## 4. Gerar o APK apontando para o backend
 
 ```powershell
-flutter build apk --release --dart-define=API_BASE_URL=https://SUA-URL.onrender.com
+flutter build apk --release --dart-define=API_BASE_URL=https://voos-baratos-backend.onrender.com
 ```
 
-## 4. Testar localmente
-
-Dentro de `server`, defina as variaveis de ambiente e rode:
+## 5. Testar localmente
 
 ```powershell
-$env:AMADEUS_CLIENT_ID="SUA_CHAVE"
-$env:AMADEUS_CLIENT_SECRET="SEU_SEGREDO"
-$env:AMADEUS_ENV="test"
-node index.js
+$env:DUFFEL_ACCESS_TOKEN="duffel_test_xxxxxxxxx"
+$env:DUFFEL_MODE="test"
+node server/index.js
 ```
-
-Depois rode o app:
-
-```powershell
-flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8787
-```
-
-No aparelho fisico, troque `10.0.2.2` pelo IP do seu computador na rede.
