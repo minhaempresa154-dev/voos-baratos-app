@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: voos-baratos-backend
+    runtime: docker
+    dockerContext: .
+    dockerfilePath: ./Dockerfile
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 8787
+      - key: AMADEUS_ENV
+        value: test
+      - key: AMADEUS_CLIENT_ID
+        sync: false
+      - key: AMADEUS_CLIENT_SECRET
+        sync: false
